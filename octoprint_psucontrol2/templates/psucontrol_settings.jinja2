@@ -1,0 +1,309 @@
+<form class="form-horizontal">
+    <h4>General</h4>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.enablePowerOffWarningDialog"> Show warning dialog when powering off via toggle button.
+            </label>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "GPIO" || settings.plugins.psucontrol2.sensingMethod() === "GPIO" -->
+    <div class="control-group">
+        <label class="control-label">GPIO Device</label>
+        <div class="controls">
+            <select data-bind="value: settings.plugins.psucontrol2.GPIODevice">
+                {% for item in plugin_psucontrol2_availableGPIODevices %}
+                <option value="{{ item }}">{{ item }}</option>
+                {% endfor %}
+            </select>
+            <span class="help-inline">Pin numbers correspond to what is exposed by the GPIO device.</span>
+            <span class="help-inline"><span class="label label-important">Raspberry Pi Users: Use BCM numbering.</span> See: <a href="https://pinout.xyz" target="_new">https://pinout.xyz</a></span>
+        </div>
+    </div>
+    <!-- /ko -->
+    <br />
+
+    <h4>Switching</h4>
+    <div class="control-group">
+        <label class="control-label">Switching Method</label>
+        <div class="controls">
+            <select data-bind="value: settings.plugins.psucontrol2.switchingMethod">
+                <option value="GCODE">G-Code Command</option>
+                <option value="SYSTEM">System Command</option>
+                <option value="GPIO"{% if not plugin_psucontrol2_hasGPIO %} disabled{% endif %}>GPIO</option>
+                <option value="PLUGIN">Plugin</option>
+            </select>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "GPIO" -->
+    <div class="control-group">
+        <label class="control-label">On/Off GPIO Pin</label>
+        <div class="controls">
+            <input type="number" min="0" class="input-mini" data-bind="value: settings.plugins.psucontrol2.onoffGPIOPin"> <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.invertonoffGPIOPin"> Invert
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "GCODE" -->
+    <div class="control-group">
+        <label class="control-label">On G-Code Command</label>
+        <div class="controls">
+            <input type="text" class="input-mini" data-bind="value: settings.plugins.psucontrol2.onGCodeCommand">
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Off G-Code Command</label>
+        <div class="controls">
+            <input type="text" class="input-mini" data-bind="value: settings.plugins.psucontrol2.offGCodeCommand">
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "SYSTEM" -->
+    <div class="control-group">
+        <label class="control-label">On System Command</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.plugins.psucontrol2.onSysCommand">
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Off System Command</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.plugins.psucontrol2.offSysCommand">
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "PLUGIN" -->
+    <div class="control-group">
+        <label class="control-label">Switching Plugin</label>
+        <div class="controls">
+            <select data-bind="value: settings.plugins.psucontrol2.switchingPlugin">
+                <option value="" disabled selected>Choose...</option>
+                {% for item in plugin_psucontrol2_availablePlugins %}
+                <option value="{{ item['pluginIdentifier'] }}">{{ item['displayName'] }}</option>
+                {% endfor %}
+                <option value="_GET_MORE_">Get More...</option>
+            </select> <a href="javascript:void(0)" data-bind="click: function() { settingsViewModel.selectTab('#settings_plugin_' + settings.plugins.psucontrol2.switchingPlugin()) }, visible: subPluginTabExists(settings.plugins.psucontrol2.switchingPlugin())" style="display: none">Settings</a>
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.switchingMethod() === "GPIO" || settings.plugins.psucontrol2.switchingMethod() === "SYSTEM" || settings.plugins.psucontrol2.switchingMethod() === "PLUGIN" -->
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.enablePseudoOnOff"> Enable switching with G-Code commands.
+            </label>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.enablePseudoOnOff() -->
+    <div class="control-group">
+        <label class="control-label">On G-Code Command</label>
+        <div class="controls">
+            <input type="text" class="input-mini" data-bind="value: settings.plugins.psucontrol2.pseudoOnGCodeCommand">
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Off G-Code Command</label>
+        <div class="controls">
+            <input type="text" class="input-mini" data-bind="value: settings.plugins.psucontrol2.pseudoOffGCodeCommand">
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- /ko -->
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.turnOffWhenError"> Turn off when an unrecoverable firmware or communication error occurs.
+            </label>
+        </div>
+    </div>
+    <br />
+
+    <h4>Sensing</h4>
+    <div class="control-group">
+        <label class="control-label">Sensing Method</label>
+        <div class="controls">
+            <select data-bind="value: settings.plugins.psucontrol2.sensingMethod">
+                <option value="INTERNAL">Internal</option>
+                <option value="SYSTEM">System Command</option>
+                <option value="GPIO"{% if not plugin_psucontrol2_hasGPIO %} disabled{% endif %}>GPIO</option>
+                <option value="PLUGIN">Plugin</option>
+            </select>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.sensingMethod() === "GPIO" -->
+    <div class="control-group">
+        <label class="control-label">Sensing GPIO Pin</label>
+        <div class="controls">
+            <input type="number" min="0" class="input-mini" data-bind="value: settings.plugins.psucontrol2.senseGPIOPin">
+            <select data-bind="value: settings.plugins.psucontrol2.senseGPIOPinPUD" class="input-medium" title="Bias" {% if not plugin_psucontrol2_supportsLineBias %}disabled{% endif %}>
+                <option value="">Float</option>
+                <option value="PULL_UP">Pull-Up</option>
+                <option value="PULL_DOWN">Pull-Down</option>
+            </select>
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.invertsenseGPIOPin"> Invert
+            <br/>
+
+            <!-- ko if: "{% if not plugin_psucontrol2_supportsLineBias %}True{%else%}False{% endif %}" === "True" -->
+            <span class="help-inline label label-important">Linux Kernel 5.5 or greater required for input bias support. <a href="https://github.com/Gifford47/OctoPrint-PSUControl/wiki/Troubleshooting#known-issues" target="_blank">More Info</a></span>
+            <!-- /ko -->
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.sensingMethod() === "SYSTEM" -->
+    <div class="control-group">
+        <label class="control-label">Sensing System Command</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.plugins.psucontrol2.senseSystemCommand">
+        </div>
+    </div>
+    <!-- /ko -->
+    <!-- ko if: settings.plugins.psucontrol2.sensingMethod() === "PLUGIN" -->
+    <div class="control-group">
+        <label class="control-label">Sensing Plugin</label>
+        <div class="controls">
+            <select data-bind="value: settings.plugins.psucontrol2.sensingPlugin">
+                <option value="" disabled selected>Choose...</option>
+                {% for item in plugin_psucontrol2_availablePlugins %}
+                <option value="{{ item['pluginIdentifier'] }}">{{ item['displayName'] }}</option>
+                {% endfor %}
+                <option value="_GET_MORE_">Get More...</option>
+            </select> <a href="javascript:void(0)" data-bind="click: function() { settingsViewModel.selectTab('#settings_plugin_' + settings.plugins.psucontrol2.sensingPlugin()) }, visible: subPluginTabExists(settings.plugins.psucontrol2.sensingPlugin())" style="display: none">Settings</a>
+        </div>
+    </div>
+    <!-- /ko -->
+    <div class="control-group">
+        <label class="control-label">Polling Interval</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="1" max="10" step="1" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.sensePollingInterval">
+                <span class="add-on">sec</span>
+            </div>
+        </div>
+    </div>
+    <br />
+
+    <h4>Power On Options</h4>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.autoOn"> Automatically turn PSU ON
+            </label>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.autoOn() -->
+    <div class="control-group">
+        <label class="control-label">Trigger Commands</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.plugins.psucontrol2.autoOnTriggerGCodeCommands">
+        </div>
+    </div>
+    <!-- /ko -->
+    <div class="control-group">
+        <label class="control-label">Post On Delay</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="0" step="0.1" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.postOnDelay">
+                <span class="add-on">sec</span>
+            </div>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Post On GCode Script</label>
+        <div class="controls">
+            <textarea rows="5" class="block" data-bind="value: scripts_gcode_psucontrol2_post_on"></textarea>
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.connectOnPowerOn"> Connect when powered on.
+            </label>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.connectOnPowerOn() -->
+    <div class="control-group">
+        <label class="control-label">Post Connect Delay</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="0" step="0.1" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.postConnectDelay">
+                <span class="add-on">sec</span>
+            </div>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Connect Retries</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="0" step="1" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.connectRetries">
+                <span class="add-on">times</span>
+            </div>
+            <span class="help-inline">Number of retry attempts if connection fails</span>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Retry Delay</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="1" step="0.5" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.connectRetryDelay">
+                <span class="add-on">sec</span>
+            </div>
+            <span class="help-inline">Wait time between retry attempts</span>
+        </div>
+    </div>
+    <!-- /ko -->
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.turnOnWhenApiUploadPrint"> Turn on prior to printing after API upload
+            </label>
+        </div>
+    </div>
+    <br />
+
+    <h4>Power Off Options</h4>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.powerOffWhenIdle"> Automatically turn PSU OFF when idle
+            </label>
+        </div>
+    </div>
+    <!-- ko if: settings.plugins.psucontrol2.powerOffWhenIdle() -->
+    <div class="control-group">
+        <label class="control-label">Idle Timeout</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="0" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.idleTimeout">
+                <span class="add-on">min</span>
+            </div>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Ignore Commands</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" data-bind="value: settings.plugins.psucontrol2.idleIgnoreCommands">
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">Wait For Temperature</label>
+        <div class="controls">
+            <div class="input-append">
+                <input type="number" min="0" class="input-mini text-right" data-bind="value: settings.plugins.psucontrol2.idleTimeoutWaitTemp">
+                <span class="add-on">°C</span>
+            </div>
+        </div>
+    </div>
+    <!-- /ko -->
+    <div class="control-group">
+        <label class="control-label">Pre Off GCode Script</label>
+        <div class="controls">
+            <textarea rows="5" class="block" data-bind="value: scripts_gcode_psucontrol2_pre_off"></textarea>
+        </div>
+    </div>
+    <div class="control-group">
+        <div class="controls">
+            <label class="checkbox">
+            <input type="checkbox" data-bind="checked: settings.plugins.psucontrol2.disconnectOnPowerOff"> Disconnect on power off.
+            </label>
+        </div>
+    </div>
+</form>

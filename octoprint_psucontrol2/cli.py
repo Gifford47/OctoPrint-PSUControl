@@ -1,6 +1,6 @@
 # coding=utf-8
 
-__author__ = "Shawn Bruce <kantlivelong@gmail.com>"
+__author__ = "Shawn Bruce <Gifford47@gmail.com>"
 __license__ = "GNU Affero General Public License http://www.gnu.org/licenses/agpl.html"
 __copyright__ = "Copyright (C) 2017 Shawn Bruce - Released under terms of the AGPLv3 License"
 
@@ -25,7 +25,7 @@ def commands(cli_group, pass_octoprint_ctx, *args, **kwargs):
                                https=https,
                                prefix=prefix)
 
-        r = client.post_command("plugin/psucontrol", command)
+        r = client.post_command("plugin/psucontrol2", command)
         try:
             r.raise_for_status()
         except requests.exceptions.HTTPError as e:

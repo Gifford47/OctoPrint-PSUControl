@@ -1,7 +1,7 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-__author__ = "Shawn Bruce <kantlivelong@gmail.com>"
+__author__ = "Shawn Bruce <Gifford47@gmail.com>"
 __license__ = "GNU Affero General Public License http://www.gnu.org/licenses/agpl.html"
 __copyright__ = "Copyright (C) 2017 Shawn Bruce - Released under terms of the AGPLv3 License"
 
@@ -43,7 +43,7 @@ except Exception:
     from .util import ResettableTimer
 
 
-class PSUControl(octoprint.plugin.StartupPlugin,
+class PSUControl2(octoprint.plugin.StartupPlugin,
                  octoprint.plugin.TemplatePlugin,
                  octoprint.plugin.AssetPlugin,
                  octoprint.plugin.SettingsPlugin,
@@ -62,6 +62,8 @@ class PSUControl(octoprint.plugin.StartupPlugin,
         self._check_psu_state_thread = None
         self._check_psu_state_event = threading.Event()
         self._idleTimer = None
+        self._connectTimer = None
+        self._connectRetryCount = 0
         self._waitForHeaters = False
         self._skipIdleTimer = False
         self._configuredGPIOPins = {}
@@ -86,6 +88,8 @@ class PSUControl(octoprint.plugin.StartupPlugin,
             postOnDelay = 0.0,
             postConnectDelay = 0.0,
             connectOnPowerOn = False,
+            connectRetries = 3,
+            connectRetryDelay = 5.0,
             disconnectOnPowerOff = False,
             sensingMethod = 'INTERNAL',
             senseGPIOPin = 0,
@@ -109,11 +113,11 @@ class PSUControl(octoprint.plugin.StartupPlugin,
     def on_settings_initialized(self):
         scripts = self._settings.listScripts("gcode")
 
-        if not "psucontrol_post_on" in scripts:
-            self._settings.saveScript("gcode", "psucontrol_post_on", u'')
+        if not "psucontrol2_post_on" in scripts:
+            self._settings.saveScript("gcode", "psucontrol2_post_on", u'')
 
-        if not "psucontrol_pre_off" in scripts:
-            self._settings.saveScript("gcode", "psucontrol_pre_off", u'')
+        if not "psucontrol2_pre_off" in scripts:
+            self._settings.saveScript("gcode", "psucontrol2_pre_off", u'')
 
         self.reload_settings()
 
@@ -143,6 +147,20 @@ class PSUControl(octoprint.plugin.StartupPlugin,
         if self.config['enablePseudoOnOff'] and self.config['switchingMethod'] == 'GCODE':
             self._logger.warning("Pseudo On/Off cannot be used in conjunction with GCODE switching. Disabling.")
             self.config['enablePseudoOnOff'] = False
+
+        # Validate delay settings - ensure non-negative values
+        if self.config['postOnDelay'] < 0:
+            self._logger.warning("postOnDelay cannot be negative, setting to 0")
+            self.config['postOnDelay'] = 0.0
+        if self.config['postConnectDelay'] < 0:
+            self._logger.warning("postConnectDelay cannot be negative, setting to 0")
+            self.config['postConnectDelay'] = 0.0
+        if self.config['connectRetries'] < 0:
+            self._logger.warning("connectRetries cannot be negative, setting to 0")
+            self.config['connectRetries'] = 0
+        if self.config['connectRetryDelay'] < 0:
+            self._logger.warning("connectRetryDelay cannot be negative, setting to 1")
+            self.config['connectRetryDelay'] = 1.0
 
         self._autoOnTriggerGCodeCommandsArray = self.config['autoOnTriggerGCodeCommands'].split(',')
         self._idleIgnoreCommandsArray = self.config['idleIgnoreCommands'].split(',')
@@ -308,7 +326,7 @@ class PSUControl(octoprint.plugin.StartupPlugin,
             if (old_isPSUOn != self.isPSUOn):
                 self._logger.debug("PSU state changed, firing psu_state_changed event.")
 
-                event = Events.PLUGIN_PSUCONTROL_PSU_STATE_CHANGED
+                event = Events.PLUGIN_PSUCONTROL2_PSU_STATE_CHANGED
                 self._event_bus.fire(event, payload=dict(isPSUOn=self.isPSUOn))
 
             if (old_isPSUOn != self.isPSUOn) and self.isPSUOn:
@@ -509,22 +527,58 @@ class PSUControl(octoprint.plugin.StartupPlugin,
             time.sleep(0.1 + self.config['postOnDelay'])
 
             self.check_psu_state()
-            
-            threading.Timer(self.config['postConnectDelay'], self.connect_printer).start()
+
+            if self.config['connectOnPowerOn']:
+                self._connectRetryCount = 0
+                if self.config['postConnectDelay'] > 0:
+                    self._logger.debug("Starting connect timer with delay: {}s".format(self.config['postConnectDelay']))
+                    self._connectTimer = threading.Timer(self.config['postConnectDelay'], self.connect_printer)
+                    self._connectTimer.start()
+                else:
+                    self.connect_printer()
 
     def connect_printer(self):
         if self.config['connectOnPowerOn'] and self._printer.is_closed_or_error():
+            self._connectRetryCount += 1
+            self._logger.debug("Attempting to connect to printer (attempt {}/{})".format(
+                self._connectRetryCount, 
+                self.config['connectRetries'] + 1
+            ))
             self._printer.connect()
             time.sleep(0.1)
 
+            # Check if connection was successful, retry if not
+            if self._printer.is_closed_or_error():
+                if self._connectRetryCount <= self.config['connectRetries']:
+                    self._logger.warning("Connection failed, scheduling retry {} in {}s".format(
+                        self._connectRetryCount + 1,
+                        self.config['connectRetryDelay']
+                    ))
+                    self._connectTimer = threading.Timer(self.config['connectRetryDelay'], self.connect_printer)
+                    self._connectTimer.start()
+                    return
+                else:
+                    self._logger.error("Failed to connect to printer after {} attempts".format(
+                        self._connectRetryCount
+                    ))
+                    return
+
         if not self._printer.is_closed_or_error():
-            self._printer.script("psucontrol_post_on", must_be_set=False)
+            self._logger.info("Successfully connected to printer")
+            self._printer.script("psucontrol2_post_on", must_be_set=False)
 
 
     def turn_psu_off(self):
+        # Cancel any pending connect timer to prevent race condition
+        if self._connectTimer is not None:
+            self._logger.debug("Cancelling pending connect timer")
+            self._connectTimer.cancel()
+            self._connectTimer = None
+            self._connectRetryCount = 0
+
         if self.config['switchingMethod'] in ['GCODE', 'GPIO', 'SYSTEM', 'PLUGIN']:
             if not self._printer.is_closed_or_error():
-                self._printer.script("psucontrol_pre_off", must_be_set=False)
+                self._printer.script("psucontrol2_pre_off", must_be_set=False)
 
             self._logger.info("Switching PSU Off")
             if self.config['switchingMethod'] == 'GCODE':
@@ -621,7 +675,7 @@ class PSUControl(octoprint.plugin.StartupPlugin,
     def on_api_command(self, command, data):
         if command in ['turnPSUOn', 'turnPSUOff', 'togglePSU']:
             try:
-                if not Permissions.PLUGIN_PSUCONTROL_CONTROL.can():
+                if not Permissions.PLUGIN_PSUCONTROL2_CONTROL.can():
                     return make_response("Insufficient rights", 403)
             except:
                 if not user_permission.can():
@@ -648,15 +702,15 @@ class PSUControl(octoprint.plugin.StartupPlugin,
 
 
     def on_settings_save(self, data):
-        if 'scripts_gcode_psucontrol_post_on' in data:
-            script = data["scripts_gcode_psucontrol_post_on"]
-            self._settings.saveScript("gcode", "psucontrol_post_on", u'' + script.replace("\r\n", "\n").replace("\r", "\n"))
-            data.pop('scripts_gcode_psucontrol_post_on')
+        if 'scripts_gcode_psucontrol2_post_on' in data:
+            script = data["scripts_gcode_psucontrol2_post_on"]
+            self._settings.saveScript("gcode", "psucontrol2_post_on", u'' + script.replace("\r\n", "\n").replace("\r", "\n"))
+            data.pop('scripts_gcode_psucontrol2_post_on')
 
-        if 'scripts_gcode_psucontrol_pre_off' in data:
-            script = data["scripts_gcode_psucontrol_pre_off"]
-            self._settings.saveScript("gcode", "psucontrol_pre_off", u'' + script.replace("\r\n", "\n").replace("\r", "\n"))
-            data.pop('scripts_gcode_psucontrol_pre_off')
+        if 'scripts_gcode_psucontrol2_pre_off' in data:
+            script = data["scripts_gcode_psucontrol2_pre_off"]
+            self._settings.saveScript("gcode", "psucontrol2_pre_off", u'' + script.replace("\r\n", "\n").replace("\r", "\n"))
+            data.pop('scripts_gcode_psucontrol2_pre_off')
 
         old_config = self.config.copy()
 
@@ -827,18 +881,18 @@ class PSUControl(octoprint.plugin.StartupPlugin,
 
     def get_update_information(self):
         return dict(
-            psucontrol=dict(
-                displayName="PSU Control",
+            psucontrol2=dict(
+                displayName="PSU Control 2",
                 displayVersion=self._plugin_version,
 
                 # version check: github repository
                 type="github_release",
-                user="kantlivelong",
+                user="Gifford47",
                 repo="OctoPrint-PSUControl",
                 current=self._plugin_version,
 
                 # update method: pip w/ dependency links
-                pip="https://github.com/kantlivelong/OctoPrint-PSUControl/archive/{target_version}.zip"
+                pip="https://github.com/Gifford47/OctoPrint-PSUControl/archive/{target_version}.zip"
             )
         )
 
@@ -862,12 +916,12 @@ class PSUControl(octoprint.plugin.StartupPlugin,
         return [self.turn_on_before_printing_after_upload]
 
 
-__plugin_name__ = "PSU Control"
+__plugin_name__ = "PSU Control 2"
 __plugin_pythoncompat__ = ">=2.7,<4"
 
 def __plugin_load__():
     global __plugin_implementation__
-    __plugin_implementation__ = PSUControl()
+    __plugin_implementation__ = PSUControl2()
 
     global __plugin_hooks__
     __plugin_hooks__ = {
